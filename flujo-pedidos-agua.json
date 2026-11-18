@@ -1,5 +1,5 @@
 {
-  "name": "Pedidos de agua con tasa BCV y aviso por Telegram",
+  "name": "Pedidos de agua con tasa BCV y pedido por WhatsApp",
   "active": false,
   "settings": {
     "executionOrder": "v1",
@@ -66,9 +66,9 @@
               "type": "number"
             },
             {
-              "id": "cfg-chat",
-              "name": "chatId",
-              "value": "PON_AQUI_TU_CHAT_ID",
+              "id": "cfg-wa",
+              "name": "whatsappNegocio",
+              "value": "58XXXXXXXXXX",
               "type": "string"
             }
           ]
@@ -128,41 +128,37 @@
       ],
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const pedido = $('Formulario de pedido').first().json;\nconst cfg = $('Configuración').first().json;\n\n// La API principal trae 'promedio'; la de respaldo trae rates.VES\nconst principal = typeof $json.promedio === 'number';\nconst tasa = principal ? $json.promedio : $json.rates?.VES;\nif (!tasa) throw new Error('Ninguna API devolvió una tasa válida');\n\nconst garrafones = Number(pedido['Garrafones']);\nconst totalUSD = garrafones * cfg.precioGarrafonUSD;\nconst totalBs = totalUSD * tasa;\nconst bs = (n) => n.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });\n\nlet texto = `Nuevo pedido de agua\\n\\n` +\n  `Cliente: ${pedido['Nombre']}\\n` +\n  `Teléfono: ${pedido['Teléfono']}\\n` +\n  `Garrafones: ${garrafones}\\n` +\n  `Dirección: ${pedido['Dirección']}\\n\\n` +\n  `Total: $${totalUSD.toFixed(2)} = Bs ${bs(totalBs)}\\n` +\n  `Tasa: ${bs(tasa)} Bs/$ (${principal ? 'BCV, DolarAPI' : 'respaldo, ER-API'})`;\nif (!principal) texto += `\\n\\nAviso: la API del BCV no respondió; se usó la tasa de respaldo.`;\n\nreturn { json: { chatId: cfg.chatId, texto, totalUSD, totalBs, tasa, fuente: principal ? 'DolarAPI' : 'ER-API' } };"
+        "jsCode": "const pedido = $('Formulario de pedido').first().json;\nconst cfg = $('Configuración').first().json;\n\n// La API principal trae 'promedio'; la de respaldo trae rates.VES\nconst principal = typeof $json.promedio === 'number';\nconst tasa = principal ? $json.promedio : $json.rates?.VES;\nif (!tasa) throw new Error('Ninguna API devolvió una tasa válida');\n\nconst garrafones = Number(pedido['Garrafones']);\nconst totalUSD = garrafones * cfg.precioGarrafonUSD;\nconst totalBs = totalUSD * tasa;\nconst bs = (n) => n.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });\n\nconst texto = `Hola, quiero hacer este pedido de agua:\\n\\n` +\n  `Nombre: ${pedido['Nombre']}\\n` +\n  `Teléfono: ${pedido['Teléfono']}\\n` +\n  `Garrafones: ${garrafones}\\n` +\n  `Dirección: ${pedido['Dirección']}\\n\\n` +\n  `Total: $${totalUSD.toFixed(2)} = Bs ${bs(totalBs)}\\n` +\n  `(tasa ${principal ? 'BCV' : 'de respaldo'}: ${bs(tasa)} Bs/$)`;\n\nconst waUrl = `https://wa.me/${cfg.whatsappNegocio}?text=${encodeURIComponent(texto)}`;\nreturn { json: { texto, waUrl, totalUSD, totalBs, tasa, fuente: principal ? 'DolarAPI' : 'ER-API' } };"
       }
     },
     {
-      "id": "a1b2c3d4-0006-4000-8000-000000000006",
-      "name": "Avisar pedido por Telegram",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        1120,
-        300
-      ],
-      "parameters": {
-        "chatId": "={{ $json.chatId }}",
-        "text": "={{ $json.texto }}",
-        "additionalFields": {
-          "appendAttribution": false
-        }
-      }
-    },
-    {
-      "id": "a1b2c3d4-0007-4000-8000-000000000007",
-      "name": "Avisar error por Telegram",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
+      "id": "a1b2c3d4-0008-4000-8000-000000000008",
+      "name": "Pedido sin tasa",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         900,
         600
       ],
       "parameters": {
-        "chatId": "={{ $('Configuración').first().json.chatId }}",
-        "text": "={{ 'Pedido SIN total: ninguna API de tasa respondió.\\nCliente: ' + $('Formulario de pedido').first().json['Nombre'] + ' · ' + $('Formulario de pedido').first().json['Teléfono'] + '\\nGarrafones: ' + $('Formulario de pedido').first().json['Garrafones'] + '\\nCalcula el total a mano.' }}",
-        "additionalFields": {
-          "appendAttribution": false
-        }
+        "mode": "runOnceForEachItem",
+        "jsCode": "const pedido = $('Formulario de pedido').first().json;\nconst cfg = $('Configuración').first().json;\nconst texto = `Hola, quiero hacer este pedido de agua:\\n\\nNombre: ${pedido['Nombre']}\\nTeléfono: ${pedido['Teléfono']}\\nGarrafones: ${pedido['Garrafones']}\\nDirección: ${pedido['Dirección']}\\n\\nTotal: por confirmar (no se pudo consultar la tasa del día)`;\nreturn { json: { texto, waUrl: `https://wa.me/${cfg.whatsappNegocio}?text=${encodeURIComponent(texto)}` } };"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0009-4000-8000-000000000009",
+      "name": "Abrir WhatsApp con el pedido",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        400
+      ],
+      "webhookId": "9c1e2f30-1111-4000-8000-abrirwhatsapp1",
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "redirect",
+        "redirectUrl": "={{ $json.waUrl }}"
       }
     }
   ],
@@ -218,7 +214,7 @@
         ],
         [
           {
-            "node": "Avisar error por Telegram",
+            "node": "Pedido sin tasa",
             "type": "main",
             "index": 0
           }
@@ -229,7 +225,18 @@
       "main": [
         [
           {
-            "node": "Avisar pedido por Telegram",
+            "node": "Abrir WhatsApp con el pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pedido sin tasa": {
+      "main": [
+        [
+          {
+            "node": "Abrir WhatsApp con el pedido",
             "type": "main",
             "index": 0
           }
